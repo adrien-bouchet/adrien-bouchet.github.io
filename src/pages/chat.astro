@@ -5,6 +5,11 @@ import Layout from '../layouts/Layout.astro';
 <Layout title="Chat">
   <section class="chat-page" aria-label="Chat interface">
     <div class="chat-panel">
+      <div id="modelStatus" class="model-status">Model: not loaded</div>
+      <pre id="modelError" class="model-error" style="display:none; white-space:pre-wrap; max-height:6rem; overflow:auto; background:rgba(0,0,0,0.6); color:#fff; padding:0.6rem; border-radius:0.5rem;"></pre>
+      <div class="model-progress" id="modelProgress" aria-hidden="true">
+        <div class="model-progress-bar" id="modelProgressBar" style="width:0%"></div>
+      </div>
       <div class="chat-log" id="chatLog" aria-live="polite"></div>
 
       <form class="chat-form" id="chatForm">
@@ -24,29 +29,202 @@ import Layout from '../layouts/Layout.astro';
     const form = document.getElementById('chatForm');
     const input = document.getElementById('chatInput');
     const log = document.getElementById('chatLog');
+    const modelStatus = document.getElementById('modelStatus');
+
+    let engine = null;
+    let activeGenerationId = 0;
+    let currentGenerationId = null;
+    let pendingGeneration = null;
+    let isProcessingGeneration = false;
+    const modelId = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
 
     function addMessage(role, text) {
       const item = document.createElement('div');
       item.className = `chat-message ${role}`;
-      item.innerHTML = `<div class="chat-bubble">${text}</div>`;
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble';
+      bubble.textContent = text;
+      item.appendChild(bubble);
       log.appendChild(item);
       log.scrollTop = log.scrollHeight;
+      return bubble;
     }
 
-    form.addEventListener('submit', (event) => {
+    async function ensureEngine() {
+      if (engine) return engine;
+      modelStatus.textContent = 'Initializing...';
+      document.getElementById('modelProgress').style.display = 'block';
+
+      const setProgress = (p) => {
+        const pct = Math.round(p * 100);
+        modelStatus.textContent = `Loading model: ${pct}%`;
+        const bar = document.getElementById('modelProgressBar');
+        if (bar) bar.style.width = `${pct}%`;
+      };
+
+      try {
+        // Try CDN import first (works without bundler in many environments)
+        let mod = null;
+        try {
+          console.debug('Attempting CDN import https://esm.run/@mlc-ai/web-llm');
+          mod = await import('https://esm.run/@mlc-ai/web-llm');
+          console.debug('CDN import succeeded');
+        } catch (cdnErr) {
+          console.warn('CDN import failed, falling back to package import', cdnErr);
+          try {
+            mod = await import('@mlc-ai/web-llm');
+            console.debug('Package import succeeded');
+          } catch (pkgErr) {
+            console.error('Package import also failed', pkgErr);
+            throw new Error('Both CDN and package imports failed: ' + pkgErr.message + ' | ' + cdnErr.message);
+          }
+        }
+
+        console.debug('Imported module keys:', Object.keys(mod));
+        const CreateMLCEngine = mod.CreateMLCEngine || mod.createMLCEngine || mod.default?.CreateMLCEngine || mod.default;
+
+        if (!CreateMLCEngine) {
+          throw new Error('CreateMLCEngine export not found on @mlc-ai/web-llm module');
+        }
+
+        engine = await CreateMLCEngine(modelId, {
+          initProgressCallback: (p) => setProgress(p.progress || 0)
+        });
+
+        setProgress(1);
+        modelStatus.textContent = 'Model loaded';
+        // hide progress after short delay
+        setTimeout(() => { document.getElementById('modelProgress').style.display = 'none'; }, 800);
+        return engine;
+      } catch (err) {
+        console.error('Model init failed', err);
+        const errBox = document.getElementById('modelError');
+        modelStatus.textContent = 'Model load failed: ' + (err && err.message ? err.message : String(err));
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.textContent = (err && err.stack) ? err.stack : String(err);
+        }
+        document.getElementById('modelProgress').style.display = 'none';
+        throw err;
+      }
+    }
+
+    async function interruptCurrentGeneration() {
+      if (!engine || typeof engine.interruptGenerate !== 'function') return;
+
+      try {
+        await Promise.resolve(engine.interruptGenerate());
+      } catch (err) {
+        console.warn('Failed to interrupt previous generation', err);
+      }
+    }
+
+    async function runGeneration({ generationId, text, assistantBubble }) {
+      await ensureEngine();
+      currentGenerationId = generationId;
+
+      // Build messages array (system + last user)
+      const messages = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: text }
+      ];
+
+      const stream = await engine.chat.completions.create({
+        messages,
+        stream: true,
+        max_tokens: 256
+      });
+      let output = '';
+
+      for await (const chunk of stream) {
+        const isCurrentGeneration = generationId === activeGenerationId;
+        const choice = chunk.choices?.[0];
+
+        if (choice?.finish_reason) {
+          continue;
+        }
+
+        const delta = choice?.delta?.content || '';
+        if (!isCurrentGeneration || !delta) {
+          continue;
+        }
+
+        output += delta;
+        assistantBubble.textContent = output;
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+
+    async function processGenerationQueue() {
+      if (isProcessingGeneration) return;
+
+      isProcessingGeneration = true;
+      try {
+        while (pendingGeneration) {
+          const generation = pendingGeneration;
+          pendingGeneration = null;
+
+          try {
+            await runGeneration(generation);
+          } catch (err) {
+            if (generation.generationId === activeGenerationId) {
+              generation.assistantBubble.textContent = 'Error: failed to get response.';
+            }
+            console.error(err);
+          } finally {
+            if (currentGenerationId === generation.generationId) {
+              currentGenerationId = null;
+            }
+          }
+        }
+      } finally {
+        isProcessingGeneration = false;
+        if (pendingGeneration) {
+          processGenerationQueue();
+        }
+      }
+    }
+
+    // Pre-init on page load so progress is visible immediately
+    (async () => {
+      if (!('gpu' in navigator)) {
+        modelStatus.textContent = 'WebGPU not available; attempting fallback.';
+      }
+      try {
+        await ensureEngine();
+      } catch (e) {
+        // leave status as failure message
+      }
+    })();
+
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
+
+      activeGenerationId += 1;
+      const generationId = activeGenerationId;
 
       addMessage('user', text);
       input.value = '';
       input.focus();
 
-      const placeholder = document.createElement('div');
-      placeholder.className = 'chat-message assistant loading';
-      placeholder.innerHTML = `<div class="chat-bubble">Assistant will reply here.</div>`;
-      log.appendChild(placeholder);
+      const assistantItem = document.createElement('div');
+      assistantItem.className = 'chat-message assistant loading';
+      const assistantBubble = document.createElement('div');
+      assistantBubble.className = 'chat-bubble';
+      assistantBubble.textContent = '';
+      assistantItem.appendChild(assistantBubble);
+      log.appendChild(assistantItem);
       log.scrollTop = log.scrollHeight;
+
+      pendingGeneration = { generationId, text, assistantBubble };
+
+      if (currentGenerationId !== null) {
+        interruptCurrentGeneration();
+      }
+
+      processGenerationQueue();
     });
 
     input.addEventListener('keydown', (event) => {
