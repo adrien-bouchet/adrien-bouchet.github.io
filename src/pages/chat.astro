@@ -125,14 +125,14 @@ import Layout from '../layouts/Layout.astro';
 
       // Build messages array (system + last user)
       const messages = [
-        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'You are a helpful assistant. Keep responses concise and brief.' },
         { role: 'user', content: text }
       ];
 
       const stream = await engine.chat.completions.create({
         messages,
         stream: true,
-        max_tokens: 256
+        max_tokens: 128
       });
       let output = '';
 
@@ -271,11 +271,24 @@ import Layout from '../layouts/Layout.astro';
     .chat-message {
       display: flex;
       justify-content: flex-start;
+      align-self: stretch;
       padding: 0;
+    }
+
+    .chat-message.assistant {
+      justify-content: flex-start;
+    }
+
+    .chat-message.assistant .chat-bubble {
+      margin-right: auto;
     }
 
     .chat-message.user {
       justify-content: flex-end;
+    }
+
+    .chat-message.user .chat-bubble {
+      margin-left: auto;
     }
 
     .chat-bubble {
@@ -294,6 +307,15 @@ import Layout from '../layouts/Layout.astro';
     .chat-message.assistant .chat-bubble {
       background: rgba(255, 255, 255, 0.9);
       color: #0a0a0a;
+      border-bottom-left-radius: 0.45rem;
+    }
+
+    .chat-message.user .chat-bubble {
+      margin-left: auto;
+      background: #2563eb;
+      color: #fff;
+      border-bottom-right-radius: 0.45rem;
+      text-align: left;
     }
 
     .chat-form {
