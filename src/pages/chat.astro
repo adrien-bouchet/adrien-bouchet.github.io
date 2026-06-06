@@ -4,7 +4,14 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="Chat">
   <section class="chat-page" aria-label="Chat interface">
-    <div class="chat-panel">
+    <div id="loadingOverlay" class="loading-overlay">
+      <div class="loading-content">
+        <div id="loadingText" class="loading-text">Loading model...</div>
+        <div id="loadingPercent" class="loading-percent">0%</div>
+      </div>
+    </div>
+
+    <div class="chat-panel" id="chatPanel" style="opacity: 0; visibility: hidden;">
       <div id="modelStatus" class="model-status">Model: not loaded</div>
       <pre id="modelError" class="model-error" style="display:none; white-space:pre-wrap; max-height:6rem; overflow:auto; background:rgba(0,0,0,0.6); color:#fff; padding:0.6rem; border-radius:0.5rem;"></pre>
       <div class="model-progress" id="modelProgress" aria-hidden="true">
@@ -21,6 +28,7 @@ import Layout from '../layouts/Layout.astro';
           placeholder="Write a message..."
           required
         ></textarea>
+        <button type="submit" class="sr-only">Send</button>
       </form>
     </div>
   </section>
@@ -30,12 +38,16 @@ import Layout from '../layouts/Layout.astro';
     const input = document.getElementById('chatInput');
     const log = document.getElementById('chatLog');
     const modelStatus = document.getElementById('modelStatus');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingPercent = document.getElementById('loadingPercent');
+    const chatPanel = document.getElementById('chatPanel');
 
     let engine = null;
     let activeGenerationId = 0;
     let currentGenerationId = null;
     let pendingGeneration = null;
     let isProcessingGeneration = false;
+    let backgroundSwitched = false;
     const modelId = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
 
     function addMessage(role, text) {
@@ -57,7 +69,27 @@ import Layout from '../layouts/Layout.astro';
 
       const setProgress = (p) => {
         const pct = Math.round(p * 100);
-        modelStatus.textContent = `Loading model: ${pct}%`;
+        loadingPercent.textContent = `${pct}%`;
+        
+        // Calculate background darkness: 0-50% = 0 to 1, 50-100% = 1 to 0
+        let backgroundOpacity;
+        if (pct <= 50) {
+          backgroundOpacity = pct / 50;
+        } else {
+          backgroundOpacity = 1 - ((pct - 50) / 50);
+        }
+        
+        loadingOverlay.style.backgroundColor = `rgba(0, 0, 0, ${backgroundOpacity})`;
+        
+        // Switch background image at 50%
+        if (pct >= 50 && !backgroundSwitched) {
+          backgroundSwitched = true;
+          const bgImg = document.querySelector('.video-bg img');
+          if (bgImg) {
+            bgImg.src = '/background.jpg';
+          }
+        }
+        
         const bar = document.getElementById('modelProgressBar');
         if (bar) bar.style.width = `${pct}%`;
       };
@@ -93,6 +125,17 @@ import Layout from '../layouts/Layout.astro';
 
         setProgress(1);
         modelStatus.textContent = 'Model loaded';
+        modelStatus.style.display = 'none';
+        
+        // Hide loading overlay and show chat panel
+        loadingOverlay.style.transition = 'opacity 0.5s ease-out';
+        loadingOverlay.style.opacity = '0';
+        setTimeout(() => {
+          loadingOverlay.style.visibility = 'hidden';
+          chatPanel.style.opacity = '1';
+          chatPanel.style.visibility = 'visible';
+        }, 500);
+        
         // hide progress after short delay
         setTimeout(() => { document.getElementById('modelProgress').style.display = 'none'; }, 800);
         return engine;
@@ -187,6 +230,10 @@ import Layout from '../layouts/Layout.astro';
 
     // Pre-init on page load so progress is visible immediately
     (async () => {
+      // Show loading overlay
+      loadingOverlay.style.visibility = 'visible';
+      loadingOverlay.style.opacity = '1';
+      
       if (!('gpu' in navigator)) {
         modelStatus.textContent = 'WebGPU not available; attempting fallback.';
       }
@@ -230,49 +277,100 @@ import Layout from '../layouts/Layout.astro';
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
-        form.requestSubmit();
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+        } else {
+          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
       }
     });
   </script>
 
-  <style>
-    .chat-page {
+  <style is:global>
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0);
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+      z-index: 9999;
+      visibility: visible;
+      opacity: 1;
+      transition: background-color 0.3s ease;
+    }
+
+    .loading-content {
+      text-align: center;
+      color: #fff;
+    }
+
+    .loading-text {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      font-weight: 500;
+    }
+
+    .loading-percent {
+      font-size: 2rem;
+      font-weight: 700;
+    }
+
+    #chatPanel {
+      transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+    }
+
+    .chat-page {
+      height: 100dvh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
       padding: 7rem 1.5rem 2rem;
     }
 
     .chat-panel {
       width: min(48rem, 100%);
-      max-width: 48rem;
-      padding: 1.5rem;
-      background: rgba(255, 255, 255, 0.04);
-      border-radius: 1.5rem;
-      backdrop-filter: blur(18px);
-      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.25);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      height: calc(100dvh - 9rem);
+      margin-inline: auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     .chat-log {
-      min-height: 28rem;
-      max-height: 54rem;
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
-      padding: 1rem;
-      margin-bottom: 1.2rem;
-      border-radius: 1.25rem;
-      background: transparent;
-      display: flex;
-      flex-direction: column;
-      gap: 0.85rem;
+      width: 100%;
+      max-width: 42rem;
+      margin: 0 auto;
     }
+
+    .chat-form {
+      flex-shrink: 0;
+      margin-top: 1rem;
+    }
+
+    .chat-log::-webkit-scrollbar {
+      width: 0;
+    }
+
+    .chat-log::-webkit-scrollbar-thumb {
+      background: transparent;
+      border-radius: 999px;
+      transition: background .2s;
+    }
+
+    .chat-log:hover::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.25);
+    }
+
 
     .chat-message {
       display: flex;
-      justify-content: flex-start;
-      align-self: stretch;
+      width: 100%;
       padding: 0;
+      margin: 0;
     }
 
     .chat-message.assistant {
@@ -292,35 +390,41 @@ import Layout from '../layouts/Layout.astro';
     }
 
     .chat-bubble {
+      width: fit-content;
       max-width: 78%;
       padding: 1rem 1.2rem;
       border-radius: 1.8rem;
-      background: rgba(255, 255, 255, 0.95);
-      color: #0a0a0a;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
       font-size: 0.95rem;
       line-height: 1.6;
       white-space: pre-wrap;
       word-break: break-word;
-      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .chat-message.assistant .chat-bubble {
-      background: rgba(255, 255, 255, 0.9);
-      color: #0a0a0a;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
       border-bottom-left-radius: 0.45rem;
     }
 
     .chat-message.user .chat-bubble {
-      margin-left: auto;
-      background: #2563eb;
+      background: rgba(255, 255, 255, 0.08);
       color: #fff;
       border-bottom-right-radius: 0.45rem;
       text-align: left;
+      border-color: rgba(255, 255, 255, 0.1);
     }
 
     .chat-form {
-      display: grid;
-      gap: 0.75rem;
+      position: sticky;
+      bottom: 0;
+
+      background: rgba(0,0,0,0.15);
+      backdrop-filter: blur(20px);
+
+      padding-top: 1rem;
     }
 
     .chat-form textarea {
@@ -335,6 +439,11 @@ import Layout from '../layouts/Layout.astro';
       background: rgba(255, 255, 255, 0.05);
       outline: none;
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .chat-form textarea::placeholder {
+      color: #ccc;
+      opacity: 1;
     }
 
     .chat-form textarea:focus {
