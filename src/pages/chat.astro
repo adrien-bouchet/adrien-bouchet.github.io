@@ -370,7 +370,7 @@ import Layout from '../layouts/Layout.astro';
       display: flex;
       width: 100%;
       padding: 0;
-      margin: 0;
+      margin: 0.75rem 0;
     }
 
     .chat-message.assistant {
@@ -394,23 +394,24 @@ import Layout from '../layouts/Layout.astro';
       max-width: 78%;
       padding: 1rem 1.2rem;
       border-radius: 1.8rem;
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.15);
       color: #fff;
       font-size: 0.95rem;
       line-height: 1.6;
       white-space: pre-wrap;
       word-break: break-word;
       border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px);
     }
 
     .chat-message.assistant .chat-bubble {
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.15);
       color: #fff;
       border-bottom-left-radius: 0.45rem;
     }
 
     .chat-message.user .chat-bubble {
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.15);
       color: #fff;
       border-bottom-right-radius: 0.45rem;
       text-align: left;
@@ -420,11 +421,6 @@ import Layout from '../layouts/Layout.astro';
     .chat-form {
       position: sticky;
       bottom: 0;
-
-      background: rgba(0,0,0,0.15);
-      backdrop-filter: blur(20px);
-
-      padding-top: 1rem;
     }
 
     .chat-form textarea {
@@ -437,8 +433,10 @@ import Layout from '../layouts/Layout.astro';
       font: inherit;
       color: #fff;
       background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
       outline: none;
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      margin-bottom: 1rem;
     }
 
     .chat-form textarea::placeholder {
