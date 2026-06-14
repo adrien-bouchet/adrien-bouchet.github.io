@@ -17,6 +17,7 @@ import Layout from '../layouts/Layout.astro';
       <div class="model-progress" id="modelProgress" aria-hidden="true">
         <div class="model-progress-bar" id="modelProgressBar" style="width:0%"></div>
       </div>
+      <button type="button" id="clearChatBtn" class="clear-chat-btn" aria-label="Clear conversation">Clear Chat</button>
       <div class="chat-log" id="chatLog" aria-live="polite"></div>
 
       <form class="chat-form" id="chatForm">
@@ -48,7 +49,9 @@ import Layout from '../layouts/Layout.astro';
     let pendingGeneration = null;
     let isProcessingGeneration = false;
     let backgroundSwitched = false;
-    const modelId = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
+    let conversationHistory = [];
+    const modelId = 'Llama-3.2-3B-Instruct-q4f16_1-MLC';
+    const MAX_HISTORY = 10;
 
     function addMessage(role, text) {
       const item = document.createElement('div');
@@ -162,20 +165,37 @@ import Layout from '../layouts/Layout.astro';
       }
     }
 
-    async function runGeneration({ generationId, text, assistantBubble }) {
+    async function runGeneration({ generationId, text, assistantBubble, assistantItem }) {
       await ensureEngine();
       currentGenerationId = generationId;
 
-      // Build messages array (system + last user)
+      // Build messages array (system + conversation history + last user)
+      const today = new Date().toISOString().split('T')[0];
       const messages = [
-        { role: 'system', content: 'You are a helpful assistant. Keep responses concise and brief.' },
+        { 
+          role: 'system', 
+          content: `You are the helpful assistant for Adrien Bouchet's portfolio website. Answer visitor questions about Adrien in THIRD PERSON. Today's date is ${today}.
+
+Facts about Adrien:
+- Adrien Bouchet is a Software Engineer
+- Expertise: Artificial Intelligence (AI/ML), Finance/FinTech, Software Development
+- Website: https://adrien-bouchet.github.io (his professional portfolio)
+
+Response Rules:
+- ALWAYS use third person: "Adrien is...", "He has...", "His work includes..."
+- NEVER use first person: no "I", "me", "my"
+- Provide direct, factual answers
+- For date questions: the current date is ${today}, just state it directly
+- Keep responses professional and concise (2-4 sentences)`
+        },
+        ...conversationHistory.slice(-MAX_HISTORY),
         { role: 'user', content: text }
       ];
 
       const stream = await engine.chat.completions.create({
         messages,
         stream: true,
-        max_tokens: 128
+        max_tokens: 256
       });
       let output = '';
 
@@ -195,6 +215,13 @@ import Layout from '../layouts/Layout.astro';
         output += delta;
         assistantBubble.textContent = output;
         log.scrollTop = log.scrollHeight;
+      }
+      
+      // Add to conversation history and clean up UI
+      if (generationId === activeGenerationId && output) {
+        conversationHistory.push({ role: 'user', content: text });
+        conversationHistory.push({ role: 'assistant', content: output });
+        assistantItem.classList.remove('loading');
       }
     }
 
@@ -244,6 +271,16 @@ import Layout from '../layouts/Layout.astro';
       }
     })();
 
+    // Clear chat button handler
+    const clearChatBtn = document.getElementById('clearChatBtn');
+    clearChatBtn.addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear the conversation?')) {
+        conversationHistory = [];
+        log.innerHTML = '';
+        input.focus();
+      }
+    });
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const text = input.value.trim();
@@ -265,7 +302,7 @@ import Layout from '../layouts/Layout.astro';
       log.appendChild(assistantItem);
       log.scrollTop = log.scrollHeight;
 
-      pendingGeneration = { generationId, text, assistantBubble };
+      pendingGeneration = { generationId, text, assistantBubble, assistantItem };
 
       if (currentGenerationId !== null) {
         interruptCurrentGeneration();
@@ -349,6 +386,32 @@ import Layout from '../layouts/Layout.astro';
     .chat-form {
       flex-shrink: 0;
       margin-top: 1rem;
+    }
+
+    .clear-chat-btn {
+      align-self: flex-end;
+      margin-bottom: 0.5rem;
+      padding: 0.4rem 0.8rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 0.5rem;
+      color: rgba(255, 255, 255, 0.8);
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .clear-chat-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+      color: #fff;
+    }
+
+    .clear-chat-btn:active {
+      background: rgba(255, 255, 255, 0.08);
+      transform: scale(0.98);
     }
 
     .chat-log::-webkit-scrollbar {
