@@ -3,12 +3,121 @@ import Layout from '../layouts/Layout.astro';
 ---
 
 <Layout title="Adrien Bouchet | About">
-  <section class="page-section">
-    <h2 class="section-title">About</h2>
-    <div class="section-content">
-      <p>
-        I'm Adrien Bouchet. This page will hold a short bio and a few links when the site grows.
-      </p>
-    </div>
-  </section>
+  <div class="about-flow">
+    <section class="about-bio">
+      <h2 class="section-title">Bio</h2>
+      <div class="section-content">
+        <p>
+          I studied computer science and applied mathematics between France and Germany, then found my way into software engineering and AI. I like hardcore problems that sit somewhere between theory and the real world: technical enough to be interesting, practical enough to matter.
+        </p>
+        <p>
+          I’m based in Antibes, where I spend a fair amount of time riding my road bike along the French Riviera or visiting art exhibitions. I’m always happy to talk about AI, software, finance, or whatever new technical obsession happens to be taking over the week.
+        </p>
+      </div>
+    </section>
+
+    <section class="about-current">
+      <h2 class="section-title">Currently</h2>
+      <div class="section-content">
+        <p>
+          I’m working as a Software Engineer, with a focus on transforming machine learning prototypes into scalable production systems. Lately, I have been working on a machine learning module to improve a legacy forecasting system and an agentic alerts detection framework to spot forecasting issues. 
+        </p>
+        <p>
+          Day to day, I enjoy building with C++, Python, and cloud tools, and working with teams that care about both clean engineering and real impact. Let’s connect—or try asking my chatbot a question. It might surprise you (or not).
+        </p>
+      </div>
+    </section>
+
+    <section class="about-contact">
+      <h2 class="section-title">Contact</h2>
+      <div class="info-grid">
+        <span class="info-label">GitHub</span>
+        <span class="info-value"><a href="https://github.com/adrien-bouchet" target="_blank" rel="noopener noreferrer">github.com/adrien-bouchet</a></span>
+        <span class="info-label">Linkedin</span>
+        <span class="info-value"><a href="https://linkedin.com/in/adrien-bouchet" target="_blank" rel="noopener noreferrer">linkedin.com/in/adrien-bouchet</a></span>
+        <span class="info-label">Chat</span>
+        <span class="info-value"><a href="/chat/">Ask the chatbot</a></span>
+        <span class="info-label">Location</span>
+        <span class="info-value"><div>Antibes, FR</div></span>
+      </div>
+    </section>
+  </div>
 </Layout>
+
+<style>
+  :global(.video-bg img),
+  :global(.video-bg video) {
+    inset: -8px;
+    width: calc(100% + 16px);
+    height: calc(100% + 16px);
+    filter: blur(4px) brightness(0.52);
+  }
+
+  :global(.background) {
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .about-flow {
+    position: relative;
+    z-index: 10;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 6.5rem 1.5rem 2rem;
+  }
+
+  .about-flow .section-title {
+    margin-bottom: 0.75rem;
+  }
+
+  .about-flow .section-content p {
+    margin-bottom: 0.9rem;
+  }
+
+  .about-bio {
+    max-width: min(34rem, 50vw);
+    margin: 0 0 0 6%;
+  }
+
+  .about-current {
+    max-width: min(34rem, 50vw);
+    margin: 6vh 6% 0 auto;
+  }
+
+  .about-contact {
+    max-width: min(30rem, 45vw);
+    margin: 20vh 0 0 12%;
+  }
+
+  @media (max-width: 900px) {
+    .about-bio {
+      margin-left: 4%;
+    }
+
+    .about-current {
+      margin-right: 4%;
+    }
+
+    .about-contact {
+      margin-left: 8%;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .about-flow {
+      padding: 5.5rem 1.25rem 3rem;
+    }
+
+    .about-bio,
+    .about-current,
+    .about-contact {
+      max-width: none;
+      margin-right: 0;
+      margin-left: 0;
+      margin-top: 2.5rem;
+    }
+
+    .about-bio {
+      margin-top: 0;
+    }
+  }
+</style>
